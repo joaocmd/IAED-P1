@@ -1,9 +1,10 @@
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 
 #define MAXFILENAME 80
 #define MAXELEMENTS 10000
-#define MATRIXLENGHT 1000
+#define MATRIXLENGHT ULONG_MAX
 
 typedef struct {
     unsigned long line, column;
@@ -13,11 +14,12 @@ typedef struct {
 typedef struct {
     unsigned long minC, maxC;
     unsigned long minL, maxL;
-    int lenght;
+    /* Dirty flags if the limits are possibly wrong.
+    i.e. after deleting an element that is
+    one of the limits.*/
+    int lenght, dirty;
     double zero;
 } MatrixInfo;
-
-#define samePosition(A, B) line(A) == line(B) && column(A) == column(B)
 
 void addElement(MatrixElement matrix[], MatrixInfo *info);
 void deleteEmptySpace(MatrixElement matrix[], int start, int nEls);
@@ -28,7 +30,7 @@ void printElement(MatrixElement e);
 int main()
 {
     char fileName[MAXFILENAME+1];
-    MatrixInfo info = {MATRIXLENGHT, 0, MATRIXLENGHT, 0, 0, 0.0};
+    MatrixInfo info = {MATRIXLENGHT, 0, MATRIXLENGHT, 0, 0, 0, 0.0};
     MatrixElement elements[MAXELEMENTS];
 
     char command;
@@ -103,7 +105,8 @@ void addElement(MatrixElement matrix[], MatrixInfo *info)
         matrix[info->lenght].column = inColumn; 
         matrix[info->lenght].value = inValue;
 
-        /* Check as we add so that we don't iterate over the whole array everytime.*/
+        /* Check as we add so that we don't iterate 
+        over the whole array everytime.*/
         if (inLine < info->minL)
             info->minL = inLine;
         if (inLine > info->maxL)
