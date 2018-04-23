@@ -26,17 +26,18 @@ void listRelevant();
 void printMatrixInfo();
 void printLine();
 void printColumn();
-void deleteEmptySpace(int start);
-void fixLimits();
-void printElement();
+void changeZero();
+void deleteElement(int start);
+void checkLimits();
+void printElement(MatrixElement element);
 
 MatrixElement mElements[MAXELEMENTS];
 MatrixInfo mInfo = {MAXMLENGHT, 0, MAXMLENGHT, 0, 0, 0, 0.0};
 
 #define cleanLimits() {mInfo.minL = mInfo.minC = MAXMLENGHT;\
                        mInfo.maxL = mInfo.maxC = 0;}
-#define isLimit(A) A.line == mInfo.minL || A.line == mInfo.maxL ||\
-                   A.column == mInfo.minC ||  A.column == mInfo.maxC
+#define isLimit(A) (A.line == mInfo.minL || A.line == mInfo.maxL ||\
+                   A.column == mInfo.minC ||  A.column == mInfo.maxC)
 
 int main()
 {
@@ -60,10 +61,12 @@ int main()
                 printLine();
                 break;
             case 'c':
+                printColumn();
                 break;
             case 'o':
                 break;
             case 'z':
+                changeZero();
                 break;
             case 's':
                 break;
@@ -75,7 +78,8 @@ int main()
                 printf("Invalid Command.\n");
                 break;
         }
-        getchar(); /* cleans the \n that was left on the buffer */
+        /* clean the \n that was left on the input buffer */
+        getchar(); 
     } while (command != 'q');
     
     return 0;
@@ -99,15 +103,14 @@ void addElement()
     If it is, just change the value) */
     for (i = 0; i < mInfo.lenght; i++) {
         if (mElements[i].line == inLine && mElements[i].column == inColumn) {
-            if (inValue != mInfo.zero) {
-                mElements[i].value = inValue;
-            } else {
-                if (isLimit(mElements[i]))
-                    mInfo.dirty = 1;
-                
-                deleteEmptySpace(i);
+            /* The element has to be deleted so that the new value goes to
+            the end of the list*/
+            deleteElement(i);
+            
+            if (inValue == mInfo.zero && isLimit(mElements[i])) {
+                mInfo.dirty = 1;
+                return;
             }
-            return;
         }
     }
 
@@ -137,9 +140,6 @@ void listRelevant()
 {
     /* Lists every element of the matrix that isn't a zero. */
 
-    /* Since the zeros are never added to the list or deleted 
-    there's  no need to check if the element is a zero.*/
-
     int i;
 
     if (mInfo.lenght == 0) {
@@ -165,8 +165,7 @@ void printMatrixInfo()
         return;
     }
 
-    if (mInfo.dirty)
-        fixLimits();
+    checkLimits();
 
     size = (mInfo.maxL - mInfo.minL + 1) * (mInfo.maxC - mInfo.minC + 1);
     dens = ((double) mInfo.lenght/size) * 100;
@@ -179,19 +178,97 @@ void printMatrixInfo()
 void printLine()
 {
     unsigned long inLine;
-    int i;
+    int i, empty = 1;
 
+    /* c90 forbids variable lenght array, so I won't use maxC-minC + 1.
+    Also not allowed to dinamically allocate memory, so I have to
+    declare a 10000 lenght array even if only going occupy 1 space.*/
+    double values[MAXELEMENTS];
+    for (i = 0; i < MAXELEMENTS; i++) {
+        values[i] = mInfo.zero;
+    }
+    
     scanf("%lu", &inLine); 
+    checkLimits();
 
+    /* Gather indexes of the elements on that line */
     for (i = 0; i < mInfo.lenght; i++) {
-        
+        if (mElements[i].line == inLine) {
+            values[mElements[i].column] = mElements[i].value;
+            empty = 0;
+        } 
+    }
+
+    if (empty) {
+        printf("empty line\n");
+    } else {
+        for (i = mInfo.minC; i <= mInfo.maxC; i++) {
+            printf(" %.3f", values[i]);    
+        }
+        printf("\n");
     }
 }
 
-void deleteEmptySpace(int start)
+void printColumn()
+{
+    unsigned long inColumn;
+    int i, empty = 1;
+
+    double values[MAXELEMENTS];
+    /* placeholder element to be able to print null elements */
+    MatrixElement element;
+
+    checkLimits();
+
+    for (i = 0; i < MAXELEMENTS; i++) {
+        values[i] = mInfo.zero;
+    }
+
+    scanf("%lu", &inColumn); 
+    element.column = inColumn;
+
+    /* Gather indexes of the elements on that line */
+    for (i = 0; i < mInfo.lenght; i++) {
+        if (mElements[i].column == inColumn) {
+            values[mElements[i].line] = mElements[i].value;
+            empty = 0;
+        } 
+    }
+
+    if (empty) {
+        printf("empty column\n");
+    } else { 
+        for (i = mInfo.minL; i <= mInfo.maxL; i++) {
+            element.line = i;
+            element.value = values[i];
+            printElement(element);    
+        }
+    }
+}
+
+void changeZero()
+{
+    /* Changes the current zero and checks if any element
+    corresponds with the new zero. Deletes it if it does. */
+
+    int i;
+    double newZero;
+
+    scanf("%lf", &newZero);
+    mInfo.zero = newZero;
+
+    for (i = 0; i < mInfo.lenght; i++) {
+        if (mElements[i].value == mInfo.zero) {
+            deleteElement(i);
+            i--;
+        }
+    }
+}
+
+void deleteElement(int start)
 {
     /* Shifts every element to the left starting from
-    an index.*/
+    the index i.*/
 
     int i;
 
@@ -202,13 +279,17 @@ void deleteEmptySpace(int start)
     mInfo.lenght--;
 }
 
-void fixLimits() 
+void checkLimits() 
 {
-    /* Call everytime the limits might be wrong, i.e.
-    the info is flagged as dirty and we need the matrix's
-    boundaries (to print or to calculate a line/column).*/
+    /* Checks if the limits of the matrix are right if
+    there's a possibility they are wrong */
 
     int i;
+
+    /* If we're sure the limits are corret there's no reason
+    to continue.*/
+    if (!mInfo.dirty)
+        return;
 
     cleanLimits();
 
