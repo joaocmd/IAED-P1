@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <limits.h>
+#include <string.h>
 #include <stdlib.h>
 
 #define MAXFILENAME 80
@@ -21,35 +22,52 @@ typedef struct {
     double zero;
 } MatrixInfo;
 
-void addElement();
+void addElement(char parameters[]);
 void listRelevant();
 void printMatrixInfo();
-void printLine();
-void printColumn();
-void changeZero();
+void printLine(char parameters[]);
+void printColumn(char parameters[]);
+void sortElements(char parameters[]);
+void changeZero(char parameters[]);
+void compressMatrix();
+void writeToFile(char parameters[]);
+void readFile(FILE *file);
+int compareLine(MatrixElement a, MatrixElement b);
+int compareColumn(MatrixElement a, MatrixElement b);
+void insertionSort(int (*cmp1) (MatrixElement, MatrixElement),
+                   int (*cmp2) (MatrixElement, MatrixElement));
 void deleteElement(int start);
 void checkLimits();
 void printElement(MatrixElement element);
 
 MatrixElement mElements[MAXELEMENTS];
 MatrixInfo mInfo = {MAXMLENGHT, 0, MAXMLENGHT, 0, 0, 0, 0.0};
+char fileToWrite[MAXFILENAME+1];
 
 #define cleanLimits() {mInfo.minL = mInfo.minC = MAXMLENGHT;\
                        mInfo.maxL = mInfo.maxC = 0;}
 #define isLimit(A) (A.line == mInfo.minL || A.line == mInfo.maxL ||\
                    A.column == mInfo.minC ||  A.column == mInfo.maxC)
 
-int main()
+int main(int argc, char *argv[])
 {
-    char fileName[MAXFILENAME+1];
+    char command, parameters[MAXFILENAME+3];
+    FILE *file;
 
-    char command;
+    if (argc == 2) {
+        file = fopen(argv[1], "r");
+        readFile(file);
+        fclose(file);
+        strcpy(fileToWrite, argv[1]);
+    }
+
     do {
         command = getchar();
-        /* printf("%d ", command); */
+        /* trailing space, \n, \0 */
+        fgets(parameters, MAXFILENAME+3, stdin);
         switch(command) {
             case 'a':
-                addElement();
+                addElement(parameters);
                 break;
             case 'p':
                 listRelevant();
@@ -58,34 +76,30 @@ int main()
                 printMatrixInfo();
                 break;
             case 'l':
-                printLine();
+                printLine(parameters);
                 break;
             case 'c':
-                printColumn();
+                printColumn(parameters);
                 break;
             case 'o':
+                sortElements(parameters);
                 break;
             case 'z':
-                changeZero();
+                changeZero(parameters);
                 break;
             case 's':
+                compressMatrix();
                 break;
             case 'w':
-                break;
-            case 'q':
-                break;
-            default:
-                printf("Invalid Command.\n");
+                writeToFile(parameters);
                 break;
         }
-        /* clean the \n that was left on the input buffer */
-        getchar(); 
     } while (command != 'q');
     
     return 0;
 }
 
-void addElement()
+void addElement(char parameters[])
 {
     /* Adds a new value to the elements list and also
     checks if it will redefine the matrix's boundaries.
@@ -97,25 +111,25 @@ void addElement()
     double inValue;
     int i;
 
-    scanf("%lu %lu %lf", &inLine, &inColumn, &inValue); 
+    sscanf(parameters, "%lu %lu %lf", &inLine, &inColumn, &inValue); 
 
     /* Check if the position is already occupied. 
-    If it is, just change the value) */
+    If it is, just change the value */
     for (i = 0; i < mInfo.lenght; i++) {
         if (mElements[i].line == inLine && mElements[i].column == inColumn) {
-            /* The element has to be deleted so that the new value goes to
-            the end of the list*/
-            deleteElement(i);
-            
-            if (inValue == mInfo.zero && isLimit(mElements[i])) {
-                mInfo.dirty = 1;
-                return;
+            if (inValue != mInfo.zero) {
+                mElements[i].line = inLine;
+                mElements[i].column = inColumn;
+                mElements[i].value = inValue;
+            } else {
+                deleteElement(i);
             }
+            return;
         }
     }
-
-    if (mInfo.lenght == MAXELEMENTS) {
-        printf("Max Elementes Reached.");
+    
+    if (mInfo.lenght == MAXELEMENTS || inValue == mInfo.zero) {
+        return;
     } else {
         mElements[mInfo.lenght].line = inLine; 
         mElements[mInfo.lenght].column = inColumn; 
@@ -157,7 +171,7 @@ void printMatrixInfo()
     /* Prints the "boundaries" of the matrix and
     its density inside that range.*/ 
 
-    int size;
+    unsigned long size;
     double dens;
 
     if (mInfo.lenght == 0) {
@@ -170,17 +184,17 @@ void printMatrixInfo()
     size = (mInfo.maxL - mInfo.minL + 1) * (mInfo.maxC - mInfo.minC + 1);
     dens = ((double) mInfo.lenght/size) * 100;
 
-    printf("[%lu %lu] [%lu %lu] %d/%d = %.3f%%\n", mInfo.minL, mInfo.maxL,
-                                                   mInfo.minC, mInfo.maxC,
-                                                   mInfo.lenght, size, dens);    
+    printf("[%lu %lu] [%lu %lu] %d / %ld = %.3f%%\n", mInfo.minL, mInfo.minC,
+                                                      mInfo.maxL, mInfo.maxC,
+                                                      mInfo.lenght, size, dens);    
 }
 
-void printLine()
+void printLine(char parameters[])
 {
     unsigned long inLine;
     int i, empty = 1;
 
-    /* c90 forbids variable lenght array, so I won't use maxC-minC + 1.
+    /* c90 forbids variable length array, so I won't use maxC-minC + 1.
     Also not allowed to dinamically allocate memory, so I have to
     declare a 10000 lenght array even if only going occupy 1 space.*/
     double values[MAXELEMENTS];
@@ -188,7 +202,7 @@ void printLine()
         values[i] = mInfo.zero;
     }
     
-    scanf("%lu", &inLine); 
+    sscanf(parameters, "%lu", &inLine); 
     checkLimits();
 
     /* Gather indexes of the elements on that line */
@@ -209,7 +223,7 @@ void printLine()
     }
 }
 
-void printColumn()
+void printColumn(char parameters[])
 {
     unsigned long inColumn;
     int i, empty = 1;
@@ -224,7 +238,7 @@ void printColumn()
         values[i] = mInfo.zero;
     }
 
-    scanf("%lu", &inColumn); 
+    sscanf(parameters, "%lu", &inColumn); 
     element.column = inColumn;
 
     /* Gather indexes of the elements on that line */
@@ -246,7 +260,27 @@ void printColumn()
     }
 }
 
-void changeZero()
+void sortElements(char parameters[])
+{
+    /* Sorts the elements by lines then columns or
+    columns then lines if it receives the c argument.*/
+
+    char c;
+
+    int (*lineCmp) (MatrixElement, MatrixElement);
+    int (*columnCmp) (MatrixElement, MatrixElement);
+    lineCmp = &compareLine;
+    columnCmp = &compareColumn;
+
+    sscanf(parameters, " %c", &c);
+ 
+    if (c == 'c')
+        insertionSort(columnCmp, lineCmp);
+    else
+        insertionSort(lineCmp, columnCmp);
+}
+
+void changeZero(char parameters[])
 {
     /* Changes the current zero and checks if any element
     corresponds with the new zero. Deletes it if it does. */
@@ -254,7 +288,7 @@ void changeZero()
     int i;
     double newZero;
 
-    scanf("%lf", &newZero);
+    sscanf(parameters, "%lf", &newZero);
     mInfo.zero = newZero;
 
     for (i = 0; i < mInfo.lenght; i++) {
@@ -265,12 +299,86 @@ void changeZero()
     }
 }
 
+void compressMatrix()
+{
+    
+}
+
+void writeToFile(char parameters[])
+{
+    char fileName[MAXFILENAME+1]; 
+    int i;
+    FILE *file;
+
+    if (parameters[0] != '\n') {
+        sscanf(parameters, " %s", fileName);
+        strcpy(fileToWrite, fileName);       
+    }
+    file = fopen(fileToWrite, "w");
+
+    for (i = 0; i < mInfo.lenght; i++) {
+        fprintf(file, "[%lu;%lu]=%.3f\n", mElements[i].line, mElements[i].column, 
+                                          mElements[i].value);        
+    }
+
+    fclose(file);
+}
+
+void readFile(FILE *file)
+{
+    unsigned long line, column;
+    double value;
+    char parameters[MAXFILENAME+3];
+
+    while (fscanf(file, "[%lu;%lu]=%lf\n", &line, &column, &value) != EOF) {
+        sprintf(parameters, " %lu %lu %f\n", line, column, value);
+        addElement(parameters);
+    }
+}
+
+int compareLine(MatrixElement a, MatrixElement b)
+{
+    /* Compares a's line to b's line and returns
+    their offset.*/
+    return (a.line - b.line);
+}
+
+int compareColumn(MatrixElement a, MatrixElement b) 
+{
+    /* Compares a's column to b's column and returns
+    their offset.*/
+    return (a.column - b.column);
+}
+
+void insertionSort(int (*cmp1) (MatrixElement, MatrixElement),
+                   int (*cmp2) (MatrixElement, MatrixElement))
+{
+    /* Typical inserton sort algorithm but uses 2 keys as
+    comparison. If the first key ties, sorts by the second.*/
+    
+    int i, j;
+
+    for (i = 1; i < mInfo.lenght; i++) {
+        MatrixElement e = mElements[i];
+        j = i-1;
+        while (j >= 0 && (cmp1(e, mElements[j]) < 0 || (cmp1(e, mElements[j]) == 0 && cmp2(e, mElements[j]) < 0))) {
+            mElements[j+1] = mElements[j];
+            j--;
+        }
+        mElements[j+1] = e;
+    }
+}
+
 void deleteElement(int start)
 {
     /* Shifts every element to the left starting from
     the index i.*/
 
     int i;
+
+    if (isLimit(mElements[start])) {
+        mInfo.dirty = 1;
+    }
 
     for (i = start+1; i < mInfo.lenght; i++) {
         mElements[i-1] = mElements[i];
@@ -292,9 +400,7 @@ void checkLimits()
         return;
 
     cleanLimits();
-
     for (i = 0; i < mInfo.lenght; i++) {
-        printElement(mElements[i]);
         if (mElements[i].line < mInfo.minL)
             mInfo.minL = mElements[i].line;
         if (mElements[i].line > mInfo.maxL)
@@ -311,6 +417,5 @@ void checkLimits()
 void printElement(MatrixElement e) 
 {
     /* Prints the line, column and value of an element. */
-
     printf("[%lu;%lu]=%.3f\n", e.line, e.column, e.value);
 }
