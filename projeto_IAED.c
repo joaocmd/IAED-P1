@@ -34,8 +34,7 @@ void writeToFile(char parameters[]);
 void readFile(FILE *file);
 int compareLine(MatrixElement a, MatrixElement b);
 int compareColumn(MatrixElement a, MatrixElement b);
-void insertionSort(int (*cmp1) (MatrixElement, MatrixElement),
-                   int (*cmp2) (MatrixElement, MatrixElement));
+void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement));
 void deleteElement(int start);
 void checkLimits();
 void printElement(MatrixElement element);
@@ -101,11 +100,8 @@ int main(int argc, char *argv[])
 
 void addElement(char parameters[])
 {
-    /* Adds a new value to the elements list and also
-    checks if it will redefine the matrix's boundaries.
-    If the value is a zero, it will delete the current
-    value of the position and flag the info as dirty
-    if the element was part of the limits.*/
+    /* Adds a new value to the elements list. If the
+    value is a "zero"zero, it will delete the element. */
 
     unsigned long inLine, inColumn;
     double inValue;
@@ -181,7 +177,7 @@ void printMatrixInfo()
 
     checkLimits();
 
-    size = (mInfo.maxL - mInfo.minL + 1) * (mInfo.maxC - mInfo.minC + 1);
+    size = (mInfo.maxL-mInfo.minL + 1) * (mInfo.maxC-mInfo.minC + 1);
     dens = ((double) mInfo.lenght/size) * 100;
 
     printf("[%lu %lu] [%lu %lu] %d / %ld = %.3f%%\n", mInfo.minL, mInfo.minC,
@@ -194,9 +190,6 @@ void printLine(char parameters[])
     unsigned long inLine;
     int i, empty = 1;
 
-    /* c90 forbids variable length array, so I won't use maxC-minC + 1.
-    Also not allowed to dinamically allocate memory, so I have to
-    declare a 10000 lenght array even if only going occupy 1 space.*/
     double values[MAXELEMENTS];
     for (i = 0; i < MAXELEMENTS; i++) {
         values[i] = mInfo.zero;
@@ -205,7 +198,7 @@ void printLine(char parameters[])
     sscanf(parameters, "%lu", &inLine); 
     checkLimits();
 
-    /* Gather indexes of the elements on that line */
+    /* Gather the lines of the elements on that line */
     for (i = 0; i < mInfo.lenght; i++) {
         if (mElements[i].line == inLine) {
             values[mElements[i].column] = mElements[i].value;
@@ -241,7 +234,7 @@ void printColumn(char parameters[])
     sscanf(parameters, "%lu", &inColumn); 
     element.column = inColumn;
 
-    /* Gather indexes of the elements on that line */
+    /* Gather the columns of the elements on that line */
     for (i = 0; i < mInfo.lenght; i++) {
         if (mElements[i].column == inColumn) {
             values[mElements[i].line] = mElements[i].value;
@@ -275,9 +268,9 @@ void sortElements(char parameters[])
     sscanf(parameters, " %c", &c);
  
     if (c == 'c')
-        insertionSort(columnCmp, lineCmp);
+        insertionSort(columnCmp);
     else
-        insertionSort(lineCmp, columnCmp);
+        insertionSort(lineCmp);
 }
 
 void changeZero(char parameters[])
@@ -301,11 +294,14 @@ void changeZero(char parameters[])
 
 void compressMatrix()
 {
-    
+    checkLimits(); 
 }
 
 void writeToFile(char parameters[])
 {
+    /* Writes the elements to a file in format
+    [line;column]=value.*/
+
     char fileName[MAXFILENAME+1]; 
     int i;
     FILE *file;
@@ -326,6 +322,9 @@ void writeToFile(char parameters[])
 
 void readFile(FILE *file)
 {
+    /* Interprets a matrix file and adds its
+    elements to the matrix.*/
+
     unsigned long line, column;
     double value;
     char parameters[MAXFILENAME+3];
@@ -340,18 +339,17 @@ int compareLine(MatrixElement a, MatrixElement b)
 {
     /* Compares a's line to b's line and returns
     their offset.*/
-    return (a.line - b.line);
+    return (a.line ==  b.line) ? a.column < b.column : a.line < b.line;
 }
 
 int compareColumn(MatrixElement a, MatrixElement b) 
 {
     /* Compares a's column to b's column and returns
     their offset.*/
-    return (a.column - b.column);
+    return (a.column ==  b.column) ? a.line < b.line : a.column < b.column;
 }
 
-void insertionSort(int (*cmp1) (MatrixElement, MatrixElement),
-                   int (*cmp2) (MatrixElement, MatrixElement))
+void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
 {
     /* Typical inserton sort algorithm but uses 2 keys as
     comparison. If the first key ties, sorts by the second.*/
@@ -361,7 +359,7 @@ void insertionSort(int (*cmp1) (MatrixElement, MatrixElement),
     for (i = 1; i < mInfo.lenght; i++) {
         MatrixElement e = mElements[i];
         j = i-1;
-        while (j >= 0 && (cmp1(e, mElements[j]) < 0 || (cmp1(e, mElements[j]) == 0 && cmp2(e, mElements[j]) < 0))) {
+        while (j >= 0 && cmpParameter(e, mElements[j])) {
             mElements[j+1] = mElements[j];
             j--;
         }
