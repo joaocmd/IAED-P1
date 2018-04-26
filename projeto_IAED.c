@@ -32,10 +32,10 @@ void changeZero(char parameters[]);
 void compressMatrix();
 void writeToFile(char parameters[]);
 void readFile(FILE *file);
-int compareLine(MatrixElement a, MatrixElement b);
-int compareColumn(MatrixElement a, MatrixElement b);
+int lessLine(MatrixElement a, MatrixElement b);
+int lessColumn(MatrixElement a, MatrixElement b);
 void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement));
-void deleteElement(int start);
+void deleteSingleElement(int start);
 void checkLimits();
 void printElement(MatrixElement element);
 
@@ -118,7 +118,7 @@ void addElement(char parameters[])
                 mElements[i].column = inColumn;
                 mElements[i].value = inValue;
             } else {
-                deleteElement(i);
+                deleteSingleElement(i);
             }
             return;
         }
@@ -259,37 +259,35 @@ void sortElements(char parameters[])
     columns then lines if it receives the c argument.*/
 
     char c;
-
-    int (*lineCmp) (MatrixElement, MatrixElement);
-    int (*columnCmp) (MatrixElement, MatrixElement);
-    lineCmp = &compareLine;
-    columnCmp = &compareColumn;
-
     sscanf(parameters, " %c", &c);
  
     if (c == 'c')
-        insertionSort(columnCmp);
+        insertionSort(lessColumn);
     else
-        insertionSort(lineCmp);
+        insertionSort(lessLine);
 }
 
 void changeZero(char parameters[])
 {
     /* Changes the current zero and checks if any element
-    corresponds with the new zero. Deletes it if it does. */
+    corresponds with the new zero. Uses a different algorithm
+    than deleteSingleElement because it's quicker if there are 
+    multiple values with the new "zero".*/
 
-    int i;
+    int i, j;
     double newZero;
 
     sscanf(parameters, "%lf", &newZero);
     mInfo.zero = newZero;
 
-    for (i = 0; i < mInfo.lenght; i++) {
-        if (mElements[i].value == mInfo.zero) {
-            deleteElement(i);
-            i--;
+    for (i = 0, j = 0; i < mInfo.lenght; i++) {
+        if (mElements[i].value != mInfo.zero) {
+            mElements[j] = mElements[i];
+            j++;
         }
     }
+    mInfo.dirty = 1;
+    mInfo.lenght = j;
 }
 
 void compressMatrix()
@@ -335,18 +333,18 @@ void readFile(FILE *file)
     }
 }
 
-int compareLine(MatrixElement a, MatrixElement b)
+int lessLine(MatrixElement a, MatrixElement b)
 {
-    /* Compares a's line to b's line and returns
-    their offset.*/
-    return (a.line ==  b.line) ? a.column < b.column : a.line < b.line;
+    /* Compares lines first then columns, returns if
+    it's smaller*/
+    return (a.line < b.line || (a.line == b.line && a.column < b.column));
 }
 
-int compareColumn(MatrixElement a, MatrixElement b) 
+int lessColumn(MatrixElement a, MatrixElement b)
 {
-    /* Compares a's column to b's column and returns
-    their offset.*/
-    return (a.column ==  b.column) ? a.line < b.line : a.column < b.column;
+    /* Compares columns first then lines, returns if
+    it's smaller*/
+    return (a.column < b.column || (a.column == b.column && a.line < b.line));
 }
 
 void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
@@ -355,9 +353,10 @@ void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
     comparison. If the first key ties, sorts by the second.*/
     
     int i, j;
+    MatrixElement e;
 
     for (i = 1; i < mInfo.lenght; i++) {
-        MatrixElement e = mElements[i];
+        e = mElements[i];
         j = i-1;
         while (j >= 0 && cmpParameter(e, mElements[j])) {
             mElements[j+1] = mElements[j];
@@ -367,7 +366,7 @@ void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
     }
 }
 
-void deleteElement(int start)
+void deleteSingleElement(int start)
 {
     /* Shifts every element to the left starting from
     the index i.*/
