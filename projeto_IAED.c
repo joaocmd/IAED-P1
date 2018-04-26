@@ -5,7 +5,8 @@
 
 #define MAXFILENAME 80
 #define MAXELEMENTS 10000
-#define MAXMLENGHT ULONG_MAX
+#define MAXMLENGTH ULONG_MAX
+#define MAXLINEDIFFERENCE 20000
 
 typedef struct {
     unsigned long line, column;
@@ -13,14 +14,16 @@ typedef struct {
 } MatrixElement;
 
 typedef struct {
+    MatrixElement elements[MAXELEMENTS];
     unsigned long minL, maxL;
     unsigned long minC, maxC;
+    unsigned long size;
     /* Dirty flags if the limits are possibly wrong.
-    i.e. after deleting an element that is
+    e.g. after deleting an element that is
     part of the limits.*/
-    int lenght, dirty;
+    int length, dirty;
     double zero;
-} MatrixInfo;
+} SparseMatrix;
 
 void addElement(char parameters[]);
 void listRelevant();
@@ -35,24 +38,26 @@ void readFile(FILE *file);
 int lessLine(MatrixElement a, MatrixElement b);
 int lessColumn(MatrixElement a, MatrixElement b);
 void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement));
-void deleteSingleElement(int start);
+void deleteElement(int start);
 void checkLimits();
 void printElement(MatrixElement element);
 
-MatrixElement mElements[MAXELEMENTS];
-MatrixInfo mInfo = {MAXMLENGHT, 0, MAXMLENGHT, 0, 0, 0, 0.0};
+SparseMatrix matrix;
 char fileToWrite[MAXFILENAME+1];
 
-#define cleanLimits() {mInfo.minL = mInfo.minC = MAXMLENGHT;\
-                       mInfo.maxL = mInfo.maxC = 0;}
-#define isLimit(A) (A.line == mInfo.minL || A.line == mInfo.maxL ||\
-                   A.column == mInfo.minC ||  A.column == mInfo.maxC)
+#define mElements matrix.elements
+#define cleanLimits() {matrix.minL = matrix.minC = MAXMLENGTH;\
+                       matrix.maxL = matrix.maxC = 0;}
+#define isLimit(A) (A.line == matrix.minL || A.line == matrix.maxL ||\
+                   A.column == matrix.minC ||  A.column == matrix.maxC)
 
 int main(int argc, char *argv[])
 {
     char command, parameters[MAXFILENAME+3];
     FILE *file;
 
+    /* Initialize the limits. */
+    cleanLimits();
     if (argc == 2) {
         file = fopen(argv[1], "r");
         readFile(file);
@@ -111,38 +116,38 @@ void addElement(char parameters[])
 
     /* Check if the position is already occupied. 
     If it is, just change the value */
-    for (i = 0; i < mInfo.lenght; i++) {
+    for (i = 0; i < matrix.length; i++) {
         if (mElements[i].line == inLine && mElements[i].column == inColumn) {
-            if (inValue != mInfo.zero) {
+            if (inValue != matrix.zero) {
                 mElements[i].line = inLine;
                 mElements[i].column = inColumn;
                 mElements[i].value = inValue;
             } else {
-                deleteSingleElement(i);
+                deleteElement(i);
             }
             return;
         }
     }
     
-    if (mInfo.lenght == MAXELEMENTS || inValue == mInfo.zero) {
+    if (matrix.length == MAXELEMENTS || inValue == matrix.zero) {
         return;
     } else {
-        mElements[mInfo.lenght].line = inLine; 
-        mElements[mInfo.lenght].column = inColumn; 
-        mElements[mInfo.lenght].value = inValue;
+        mElements[matrix.length].line = inLine; 
+        mElements[matrix.length].column = inColumn; 
+        mElements[matrix.length].value = inValue;
 
         /* Check as we add so that we don't iterate 
         over the whole array everytime.*/
-        if (inLine < mInfo.minL)
-            mInfo.minL = inLine;
-        if (inLine > mInfo.maxL)
-            mInfo.maxL = inLine;
-        if (inColumn < mInfo.minC)
-            mInfo.minC = inColumn;
-        if (inColumn > mInfo.maxC)
-            mInfo.maxC = inColumn;
+        if (inLine < matrix.minL)
+            matrix.minL = inLine;
+        if (inLine > matrix.maxL)
+            matrix.maxL = inLine;
+        if (inColumn < matrix.minC)
+            matrix.minC = inColumn;
+        if (inColumn > matrix.maxC)
+            matrix.maxC = inColumn;
 
-        mInfo.lenght++;
+        matrix.length++;
     }
 } 
 
@@ -152,12 +157,12 @@ void listRelevant()
 
     int i;
 
-    if (mInfo.lenght == 0) {
+    if (matrix.length == 0) {
         printf("empty matrix\n");
         return;
     }
 
-    for (i = 0; i < mInfo.lenght; i++) {
+    for (i = 0; i < matrix.length; i++) {
         printElement(mElements[i]);    
     }
 }
@@ -167,22 +172,21 @@ void printMatrixInfo()
     /* Prints the "boundaries" of the matrix and
     its density inside that range.*/ 
 
-    unsigned long size;
-    double dens;
+    float dens;
 
-    if (mInfo.lenght == 0) {
+    if (matrix.length == 0) {
         printf("empty matrix\n");
         return;
     }
 
     checkLimits();
 
-    size = (mInfo.maxL-mInfo.minL + 1) * (mInfo.maxC-mInfo.minC + 1);
-    dens = ((double) mInfo.lenght/size) * 100;
+    dens = (float) matrix.length/matrix.size;
 
-    printf("[%lu %lu] [%lu %lu] %d / %ld = %.3f%%\n", mInfo.minL, mInfo.minC,
-                                                      mInfo.maxL, mInfo.maxC,
-                                                      mInfo.lenght, size, dens);    
+    printf("[%lu %lu] [%lu %lu] %d / %ld = %.3f%%\n", matrix.minL, matrix.minC,
+                                                      matrix.maxL, matrix.maxC,
+                                                      matrix.length, matrix.size, 
+                                                      dens * 100);    
 }
 
 void printLine(char parameters[])
@@ -192,14 +196,14 @@ void printLine(char parameters[])
 
     double values[MAXELEMENTS];
     for (i = 0; i < MAXELEMENTS; i++) {
-        values[i] = mInfo.zero;
+        values[i] = matrix.zero;
     }
     
     sscanf(parameters, "%lu", &inLine); 
     checkLimits();
 
     /* Gather the lines of the elements on that line */
-    for (i = 0; i < mInfo.lenght; i++) {
+    for (i = 0; i < matrix.length; i++) {
         if (mElements[i].line == inLine) {
             values[mElements[i].column] = mElements[i].value;
             empty = 0;
@@ -209,7 +213,7 @@ void printLine(char parameters[])
     if (empty) {
         printf("empty line\n");
     } else {
-        for (i = mInfo.minC; i <= mInfo.maxC; i++) {
+        for (i = matrix.minC; i <= matrix.maxC; i++) {
             printf(" %.3f", values[i]);    
         }
         printf("\n");
@@ -228,14 +232,14 @@ void printColumn(char parameters[])
     checkLimits();
 
     for (i = 0; i < MAXELEMENTS; i++) {
-        values[i] = mInfo.zero;
+        values[i] = matrix.zero;
     }
 
     sscanf(parameters, "%lu", &inColumn); 
     element.column = inColumn;
 
     /* Gather the columns of the elements on that line */
-    for (i = 0; i < mInfo.lenght; i++) {
+    for (i = 0; i < matrix.length; i++) {
         if (mElements[i].column == inColumn) {
             values[mElements[i].line] = mElements[i].value;
             empty = 0;
@@ -245,7 +249,7 @@ void printColumn(char parameters[])
     if (empty) {
         printf("empty column\n");
     } else { 
-        for (i = mInfo.minL; i <= mInfo.maxL; i++) {
+        for (i = matrix.minL; i <= matrix.maxL; i++) {
             element.line = i;
             element.value = values[i];
             printElement(element);    
@@ -269,30 +273,45 @@ void sortElements(char parameters[])
 
 void changeZero(char parameters[])
 {
-    /* Changes the current zero and checks if any element
-    corresponds with the new zero. Uses a different algorithm
-    than deleteSingleElement because it's quicker if there are 
-    multiple values with the new "zero".*/
+    /* Changes the current zero and removes it from the matrix.
+    Uses a different algorithm than deleteElement to 
+    optimize when there are multiple values with the new "zero".*/
 
     int i, j;
     double newZero;
 
     sscanf(parameters, "%lf", &newZero);
-    mInfo.zero = newZero;
+    matrix.zero = newZero;
 
-    for (i = 0, j = 0; i < mInfo.lenght; i++) {
-        if (mElements[i].value != mInfo.zero) {
+    for (i = 0, j = 0; i < matrix.length; i++) {
+        if (mElements[i].value != matrix.zero) {
             mElements[j] = mElements[i];
             j++;
         }
     }
-    mInfo.dirty = 1;
-    mInfo.lenght = j;
+    matrix.dirty = 1;
+    matrix.length = j;
 }
 
 void compressMatrix()
 {
+    /* int i, c;
+    double values[MAXELEMENTS];
+    unsigned long indexes[MAXELEMENTS];
+    unsigned long offset[MAXLINEDIFFERENCE];
+    int lineLengths[MAXLINEDIFFERENCE]; 
+    Line lines[MAXLINEDIFFERENCE];
+     
     checkLimits(); 
+
+    if ((float) matrix.length/matrix.size > 0.5) {
+        printf("dense matrix\n");
+        return;
+    }
+
+    for (i = 0; i < matrix.lenght; i++) {
+        
+    } */
 }
 
 void writeToFile(char parameters[])
@@ -310,7 +329,7 @@ void writeToFile(char parameters[])
     }
     file = fopen(fileToWrite, "w");
 
-    for (i = 0; i < mInfo.lenght; i++) {
+    for (i = 0; i < matrix.length; i++) {
         fprintf(file, "[%lu;%lu]=%.3f\n", mElements[i].line, mElements[i].column, 
                                           mElements[i].value);        
     }
@@ -355,7 +374,7 @@ void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
     int i, j;
     MatrixElement e;
 
-    for (i = 1; i < mInfo.lenght; i++) {
+    for (i = 1; i < matrix.length; i++) {
         e = mElements[i];
         j = i-1;
         while (j >= 0 && cmpParameter(e, mElements[j])) {
@@ -366,49 +385,48 @@ void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
     }
 }
 
-void deleteSingleElement(int start)
+void deleteElement(int start)
 {
     /* Shifts every element to the left starting from
-    the index i.*/
+    the index start.*/
 
     int i;
 
     if (isLimit(mElements[start])) {
-        mInfo.dirty = 1;
+        matrix.dirty = 1;
     }
 
-    for (i = start+1; i < mInfo.lenght; i++) {
+    for (i = start+1; i < matrix.length; i++) {
         mElements[i-1] = mElements[i];
     }
 
-    mInfo.lenght--;
+    matrix.length--;
 }
 
 void checkLimits() 
 {
     /* Checks if the limits of the matrix are right if
-    there's a possibility they are wrong */
+    there's a possibility they are wrong. Also updates the size. */
 
     int i;
 
     /* If we're sure the limits are corret there's no reason
-    to continue.*/
-    if (!mInfo.dirty)
-        return;
-
-    cleanLimits();
-    for (i = 0; i < mInfo.lenght; i++) {
-        if (mElements[i].line < mInfo.minL)
-            mInfo.minL = mElements[i].line;
-        if (mElements[i].line > mInfo.maxL)
-            mInfo.maxL = mElements[i].line;
-        if (mElements[i].column < mInfo.minC)
-            mInfo.minC = mElements[i].column;
-        if (mElements[i].column > mInfo.maxC)
-            mInfo.maxC = mElements[i].column;
+    to reset them.*/
+    if (matrix.dirty) {
+        cleanLimits();
+        for (i = 0; i < matrix.length; i++) {
+            if (mElements[i].line < matrix.minL)
+                matrix.minL = mElements[i].line;
+            if (mElements[i].line > matrix.maxL)
+                matrix.maxL = mElements[i].line;
+            if (mElements[i].column < matrix.minC)
+                matrix.minC = mElements[i].column;
+            if (mElements[i].column > matrix.maxC)
+                matrix.maxC = mElements[i].column;
+        }
     }
-
-    mInfo.dirty = 0;
+    matrix.dirty = 0;
+    matrix.size = (matrix.maxL-matrix.minL + 1) *  (matrix.maxC-matrix.minC + 1);
 }
 
 void printElement(MatrixElement e) 
