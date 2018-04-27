@@ -1,3 +1,5 @@
+/* Joao Carlos Morgado David - 89471 */
+
 #include <stdio.h>
 #include <limits.h>
 #include <string.h>
@@ -38,6 +40,9 @@ void readFile(FILE *file);
 int lessLine(MatrixElement a, MatrixElement b);
 int lessColumn(MatrixElement a, MatrixElement b);
 void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement));
+void sortByLineAndDensity(MatrixElement elements[], int nEls[]);
+void printCompressedMatrix(double values[], unsigned long indexes[],
+                           int offsets[], int maxOffset);
 void deleteElement(int start);
 void checkLimits();
 void printElement(MatrixElement element);
@@ -163,7 +168,7 @@ void listRelevant()
     }
 
     for (i = 0; i < matrix.length; i++) {
-        printElement(mElements[i]);    
+        printElement(mElements[i]);
     }
 }
 
@@ -185,36 +190,38 @@ void printMatrixInfo()
 
     printf("[%lu %lu] [%lu %lu] %d / %ld = %.3f%%\n", matrix.minL, matrix.minC,
                                                       matrix.maxL, matrix.maxC,
-                                                      matrix.length, matrix.size, 
-                                                      dens * 100);    
+                                                      matrix.length, matrix.size,
+                                                      dens * 100);
 }
 
 void printLine(char parameters[])
 {
-    unsigned long inLine;
-    int i, empty = 1;
+    /* Prints a given line in format: value1 value2 ... valuen */
 
+    unsigned long inLine, nColumns;
+    int i, empty = 1;
     double values[MAXELEMENTS];
+
     for (i = 0; i < MAXELEMENTS; i++) {
         values[i] = matrix.zero;
     }
-    
     sscanf(parameters, "%lu", &inLine); 
     checkLimits();
 
     /* Gather the lines of the elements on that line */
     for (i = 0; i < matrix.length; i++) {
         if (mElements[i].line == inLine) {
-            values[mElements[i].column] = mElements[i].value;
+            values[mElements[i].column - matrix.minC] = mElements[i].value;
             empty = 0;
-        } 
+        }
     }
 
     if (empty) {
         printf("empty line\n");
     } else {
-        for (i = matrix.minC; i <= matrix.maxC; i++) {
-            printf(" %.3f", values[i]);    
+        nColumns = matrix.maxC-matrix.minC + 1;
+        for (i = 0; i < nColumns; i++) {
+            printf(" %.3f", values[i]);
         }
         printf("\n");
     }
@@ -222,37 +229,32 @@ void printLine(char parameters[])
 
 void printColumn(char parameters[])
 {
-    unsigned long inColumn;
+    /* Prints a given column vertically in format [line;column]=value */
+
+    unsigned long inColumn, nLines;
     int i, empty = 1;
-
     double values[MAXELEMENTS];
-    /* placeholder element to be able to print null elements */
-    MatrixElement element;
-
-    checkLimits();
 
     for (i = 0; i < MAXELEMENTS; i++) {
         values[i] = matrix.zero;
     }
-
     sscanf(parameters, "%lu", &inColumn); 
-    element.column = inColumn;
+    checkLimits();
 
     /* Gather the columns of the elements on that line */
     for (i = 0; i < matrix.length; i++) {
         if (mElements[i].column == inColumn) {
-            values[mElements[i].line] = mElements[i].value;
+            values[mElements[i].line - matrix.minL] = mElements[i].value;
             empty = 0;
-        } 
+        }
     }
 
     if (empty) {
         printf("empty column\n");
     } else { 
-        for (i = matrix.minL; i <= matrix.maxL; i++) {
-            element.line = i;
-            element.value = values[i];
-            printElement(element);    
+        nLines = matrix.maxL-matrix.minL + 1;
+        for (i = 0; i < nLines; i++) {
+            printf("[%lu;%lu]=%.3f\n", i+matrix.minL, inColumn, values[i]);
         }
     }
 }
@@ -263,9 +265,9 @@ void sortElements(char parameters[])
     columns then lines if it receives the c argument.*/
 
     char c;
-    sscanf(parameters, " %c", &c);
+    sscanf(parameters, "%c", &c);
  
-    if (c == 'c')
+    if (c != '\n')
         insertionSort(lessColumn);
     else
         insertionSort(lessLine);
@@ -293,25 +295,82 @@ void changeZero(char parameters[])
     matrix.length = j;
 }
 
+
+
 void compressMatrix()
 {
-    /* int i, c;
-    double values[MAXELEMENTS];
-    unsigned long indexes[MAXELEMENTS];
-    unsigned long offset[MAXLINEDIFFERENCE];
-    int lineLengths[MAXLINEDIFFERENCE]; 
-    Line lines[MAXLINEDIFFERENCE];
-     
-    checkLimits(); 
+    /* Calculates the compression of the global matrix 
+    with the given algorithm. I'm probably declaring way
+    too big */
 
+    int i, j, largestIndexInLine;
+    double values[MAXELEMENTS*2];
+    unsigned long indexes[MAXELEMENTS*2] = {0};
+    int offset, maxOffset = 0, offsets[MAXELEMENTS] = {0};
+    int nElsLine, nElsLines[MAXELEMENTS] = {0};
+    MatrixElement elements[MAXELEMENTS];
+ 
+    checkLimits(); 
     if ((float) matrix.length/matrix.size > 0.5) {
         printf("dense matrix\n");
         return;
     }
 
-    for (i = 0; i < matrix.lenght; i++) {
-        
-    } */
+    for (i = 0; i < matrix.length; i++) {
+        elements[i] = mElements[i]; 
+        nElsLines[mElements[i].line - matrix.minL]++;
+        values[i] = matrix.zero;
+    }
+    sortByLineAndDensity(elements, nElsLines);
+
+    /* The main for goes from line to line, lines are all
+    grouped on the array. */
+    for (i = 0; i < matrix.length; i += nElsLine) {
+        nElsLine = nElsLines[elements[i].line - matrix.minL];
+        offset = 0;
+        /* Iterates over each element of the line.
+        Restarts if it encounters an occupied slot. */
+        largestIndexInLine = i+nElsLine;
+        for (j = i; j < largestIndexInLine; j++) {
+            if (values[elements[j].column+offset - matrix.minC] != matrix.zero) {
+                j = i-1;
+                offset++;
+            }
+        }
+        /* Add the correct values to the arrays. */
+        for (j = i; j < largestIndexInLine; j++) {
+            values[elements[j].column+offset - matrix.minC] = elements[j].value;
+            indexes[elements[j].column+offset - matrix.minC] = elements[i].line;
+        }
+        offsets[elements[i].line - matrix.minL] = offset;
+        if (offset > maxOffset) {
+            maxOffset = offset;
+        }
+    }
+
+    printCompressedMatrix(values, indexes, offsets, maxOffset);
+}
+
+void printCompressedMatrix(double values[], unsigned long indexes[],
+                           int offsets[], int maxOffset)
+{
+    /* Prints the representation of a compressed matrix with its
+    given values, indexes and offsets.*/
+    int i, nLines, compressedLength;
+
+    compressedLength = (matrix.maxC-matrix.minC + 1) + maxOffset;
+    nLines = matrix.maxL-matrix.minL + 1;
+    printf("value =");
+    for (i = 0; i < compressedLength; i++)
+        printf(" %.3f", values[i]);
+    printf("\nindex =");
+    for (i = 0; i < compressedLength; i++)
+        printf(" %lu", indexes[i]);
+    printf("\noffset =");
+    for (i = 0; i < nLines; i++)
+        printf(" %d", offsets[i]);
+    printf("\n");
+
 }
 
 void writeToFile(char parameters[])
@@ -330,7 +389,8 @@ void writeToFile(char parameters[])
     file = fopen(fileToWrite, "w");
 
     for (i = 0; i < matrix.length; i++) {
-        fprintf(file, "[%lu;%lu]=%.3f\n", mElements[i].line, mElements[i].column, 
+        fprintf(file, "[%lu;%lu]=%.3f\n", mElements[i].line, 
+                                          mElements[i].column, 
                                           mElements[i].value);        
     }
 
@@ -368,8 +428,8 @@ int lessColumn(MatrixElement a, MatrixElement b)
 
 void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
 {
-    /* Typical inserton sort algorithm but uses 2 keys as
-    comparison. If the first key ties, sorts by the second.*/
+    /* Typical inserton sort algorithm, takes a function pointer
+    for the comparation. */
     
     int i, j;
     MatrixElement e;
@@ -382,6 +442,30 @@ void insertionSort(int (*cmpParameter) (MatrixElement, MatrixElement))
             j--;
         }
         mElements[j+1] = e;
+    }
+}
+
+void sortByLineAndDensity(MatrixElement elements[], int nEls[])
+{
+    /* Used to sort list by the density of its line. Uses insertion
+    sort algorithm. nEls is number of elements for each line (nEls[0] is
+    the number of elements in line 0 if minL is 0)*/
+    
+    int i, j;
+    MatrixElement e;
+
+    for (i = 1; i < matrix.length; i++) {
+        e = elements[i];
+        j = i-1;
+        while (j >= 0 && 
+              (nEls[elements[j].line - matrix.minL] < nEls[e.line - matrix.minL] ||\
+              (nEls[elements[j].line - matrix.minL] == nEls[e.line - matrix.minL] &&\
+              elements[j].line > e.line))) {
+            
+            elements[j+1] = elements[j];
+            j--;
+        }
+        elements[j+1] = e;
     }
 }
 
